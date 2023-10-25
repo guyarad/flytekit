@@ -108,6 +108,11 @@ def get_fsspec_storage_options(
     return {}
 
 
+def fs_has_protocol(file_system: fsspec.AbstractFileSystem, protocol: str) -> bool:
+    fs_protos = (file_system.protocol,) if isinstance(file_system.protocol, str) else file_system.protocol
+    return protocol in fs_protos
+
+
 @decorator
 def retry_request(func, *args, **kwargs):
     # TODO: Remove this method once s3fs has a new release. https://github.com/fsspec/s3fs/pull/865
@@ -274,7 +279,7 @@ class FileAccessProvider(object):
         return f, t
 
     def sep(self, file_system: typing.Optional[fsspec.AbstractFileSystem]) -> str:
-        if file_system is None or file_system.protocol == "file":
+        if file_system is None or fs_has_protocol(file_system, "file"):
             return os.sep
         if isinstance(file_system.protocol, tuple) or isinstance(file_system.protocol, list):
             if "file" in file_system.protocol:
@@ -299,7 +304,7 @@ class FileAccessProvider(object):
         if recursive:
             from_path, to_path = self.recursive_paths(from_path, to_path)
         try:
-            if os.name == "nt" and file_system.protocol == "file" and recursive:
+            if os.name == "nt" and fs_has_protocol(file_system, "file") and recursive:
                 import shutil
 
                 return shutil.copytree(
@@ -340,9 +345,10 @@ class FileAccessProvider(object):
         from_path = self.strip_file_header(from_path)
         if recursive:
             # Only check this for the local filesystem
-            if file_system.protocol == "file" and not file_system.isdir(from_path):
+            has_file_protocol = fs_has_protocol(file_system, "file")
+            if has_file_protocol and not file_system.isdir(from_path):
                 raise FlyteAssertion(f"Source path {from_path} is not a directory")
-            if os.name == "nt" and file_system.protocol == "file":
+            if os.name == "nt" and has_file_protocol:
                 import shutil
 
                 return shutil.copytree(
